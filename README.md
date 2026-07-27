@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Spotify Organizer
 
-## Getting Started
+App pessoal para organizar a biblioteca/playlists do Spotify de forma mais dinâmica do que o Spotify permite nativamente, com um dashboard "HUD" minimalista para acompanhar o que estás a ouvir.
 
-First, run the development server:
+Stack: Next.js 16 (App Router) + TypeScript + Tailwind v4 + shadcn/ui + Auth.js v5 (OAuth PKCE) + Prisma + SQLite.
+
+## Setup
+
+### 1. Criar a app no Spotify Developer Dashboard
+
+1. Vai a [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) e inicia sessão (conta **Premium** obrigatória para Development Mode).
+2. **Create app**.
+3. **Redirect URI**: `http://127.0.0.1:3000/api/auth/callback/spotify`
+   > A Spotify já não aceita `localhost` como redirect URI (só HTTPS ou o IP de loopback literal `127.0.0.1`). Usa sempre `127.0.0.1`, não `localhost`.
+4. Guarda o **Client ID** e o **Client Secret** (Settings da app).
+
+### 2. Configurar variáveis de ambiente
+
+```bash
+cp .env.example .env.local
+```
+
+Preenche `SPOTIFY_CLIENT_ID` e `SPOTIFY_CLIENT_SECRET` com os valores do passo anterior. `AUTH_SECRET` e `TOKEN_ENCRYPTION_KEY` já vêm preenchidos com valores gerados aleatoriamente — substitui-os se preferires gerar os teus:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"  # AUTH_SECRET
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"      # TOKEN_ENCRYPTION_KEY
+```
+
+### 3. Instalar dependências e preparar a base de dados
+
+```bash
+npm install
+npx prisma migrate dev
+```
+
+### 4. Correr em desenvolvimento
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abre **http://127.0.0.1:3000** (não `localhost`, para bater certo com o Redirect URI configurado na Spotify).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Notas
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Este projeto está desenhado para uso pessoal (single-user). A app Spotify fica em **Development Mode**, limitada a 5 utilizadores autorizados.
+- Alguns endpoints da Spotify Web API (`/recommendations`, `/audio-features`, `/related-artists`) estão bloqueados para apps novas desde nov/2024 — o motor de sugestões (Fase 4) usa sobreposição de género/artista em vez de audio-features. Ver `prisma/schema.prisma` e `lib/spotify/` para detalhes.
+- Base de dados local usa SQLite (`prisma/dev.db`, não versionado). Para deploy em produção (Vercel), troca `DATABASE_URL` para uma instância Postgres (ex: Neon) — o filesystem da Vercel não é persistente.
 
-## Learn More
+## Deploy
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+[Vercel](https://vercel.com/new) — lembra-te de configurar as env vars (com um `DATABASE_URL` Postgres) e atualizar o Redirect URI no Spotify Dashboard para o domínio de produção.

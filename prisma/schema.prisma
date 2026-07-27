@@ -1,0 +1,100 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  spotifyId          String   @unique
+  displayName        String?
+  email              String?
+  image              String?
+  accessToken        String
+  accessTokenExpires DateTime
+  refreshTokenEnc    String
+  createdAt          DateTime @default(now())
+
+  collections Collection[]
+  tags        Tag[]
+}
+
+/// A user-defined "folder" grouping saved tracks and/or playlists by Spotify ID,
+/// since the Spotify Web API does not expose real playlist folders.
+model Collection {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  color       String?
+  icon        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  trackItems        CollectionTrack[]
+  playlistItems     CollectionPlaylist[]
+  smartPlaylistRule SmartPlaylistRule?
+
+  @@index([userId])
+}
+
+/// A lightweight many-to-many label a track can carry, independent of any Collection.
+model Tag {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  color     String?
+  createdAt DateTime @default(now())
+
+  trackTags TrackTag[]
+
+  @@unique([userId, name])
+}
+
+model CollectionTrack {
+  id             String     @id @default(cuid())
+  collectionId   String
+  collection     Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  spotifyTrackId String
+  addedAt        DateTime   @default(now())
+  position       Int?
+
+  @@unique([collectionId, spotifyTrackId])
+}
+
+model CollectionPlaylist {
+  id                String     @id @default(cuid())
+  collectionId      String
+  collection        Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  spotifyPlaylistId String
+  addedAt           DateTime   @default(now())
+
+  @@unique([collectionId, spotifyPlaylistId])
+}
+
+model TrackTag {
+  id             String   @id @default(cuid())
+  tagId          String
+  tag            Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  spotifyTrackId String
+  addedAt        DateTime @default(now())
+
+  @@unique([tagId, spotifyTrackId])
+}
+
+/// Phase 4+: user-defined rules for an auto-updating "smart" collection.
+model SmartPlaylistRule {
+  id           String     @id @default(cuid())
+  collectionId String     @unique
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  ruleJson     String
+  lastRunAt    DateTime?
+}
