@@ -58,7 +58,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     }
 
     if (!playlistId) {
-      const playlist = await spotifyFetch<CreatedPlaylist>(`/users/${user.spotifyId}/playlists`, {
+      // Spotify's February 2026 Dev Mode migration removed POST /users/{id}/playlists
+      // (it returns 403); playlist creation now goes through /me/playlists.
+      const playlist = await spotifyFetch<CreatedPlaylist>("/me/playlists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -80,11 +82,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     });
 
     // The first batch replaces the playlist's entire track list; any further
-    // batches are appended on top of it.
+    // batches are appended on top of it. The /items variants are the post-2026
+    // endpoint names — the legacy /tracks ones return 403 in Development Mode.
     let syncedTracks = 0;
     for (const [index, batch] of chunk(uris, 100).entries()) {
       try {
-        await spotifyFetch<PlaylistSnapshot>(`/playlists/${playlistId}/tracks`, {
+        await spotifyFetch<PlaylistSnapshot>(`/playlists/${playlistId}/items`, {
           method: index === 0 ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ uris: batch }),

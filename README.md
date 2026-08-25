@@ -76,6 +76,9 @@ npx tsc --noEmit # typecheck
   of this, track metadata is snapshotted when a track is added to a collection rather than re-fetched by ID,
   and the planned suggestion engine uses genre/artist overlap instead of audio features. See
   `prisma/schema.prisma` and `lib/spotify/` for details.
+- Spotify's February 2026 Dev Mode migration also renamed the playlist endpoints — playlist creation goes
+  through `POST /me/playlists` and playlist track writes through `/playlists/{id}/items`; the legacy
+  `/users/{id}/playlists` and `/playlists/{id}/tracks` return 403 in Development Mode.
 - The local database is SQLite. `DATABASE_URL="file:./dev.db"` resolves relative to the process working
   directory, so the file lands at the repo root (`./dev.db`) and is gitignored.
 
