@@ -1,32 +1,27 @@
 import { prisma } from "@/lib/db";
 
-async function resolveSmartCollectionTagId(collectionId: string): Promise<string | undefined> {
-  const rule = await prisma.smartPlaylistRule.findUnique({ where: { collectionId } });
-  return rule ? (JSON.parse(rule.ruleJson) as { tagId?: string }).tagId : undefined;
+/**
+ * The set of liked tracks a smart rule selects: everything carrying the rule's tag that is
+ * still in the user's synced liked-songs cache.
+ *
+ * Both readers below build on this one predicate on purpose — when the count and the listing
+ * derived it separately they disagreed, so a collection could show "3" and open empty.
+ */
+async function likedTracksMatchingTag(userId: string, tagId: string) {
+  const trackTags = await prisma.trackTag.findMany({
+    where: { tagId },
+    select: { spotifyTrackId: true },
+  });
+  return { userId, spotifyTrackId: { in: trackTags.map((t) => t.spotifyTrackId) } };
 }
 
-/**
- * Resolves the live membership of a smart collection (rule: `{"type":"tag","tagId"}`) by
- * joining TrackTag against the user's synced LikedTrack cache. Smart collections have no
- * CollectionTrack rows — membership is always computed, never stored.
- */
-export async function resolveSmartCollectionTracks(userId: string, collectionId: string) {
-  const tagId = await resolveSmartCollectionTagId(collectionId);
-  if (!tagId) return [];
-
-  const trackTags = await prisma.trackTag.findMany({ where: { tagId } });
-  const spotifyTrackIds = trackTags.map((t) => t.spotifyTrackId);
-  if (spotifyTrackIds.length === 0) return [];
-
+export async function resolveSmartCollectionTracks(userId: string, tagId: string) {
   return prisma.likedTrack.findMany({
-    where: { userId, spotifyTrackId: { in: spotifyTrackIds } },
+    where: await likedTracksMatchingTag(userId, tagId),
     orderBy: { addedAt: "desc" },
   });
 }
 
-/** Same rule resolution as resolveSmartCollectionTracks, but only counts — no track rows. */
-export async function countSmartCollectionTracks(collectionId: string) {
-  const tagId = await resolveSmartCollectionTagId(collectionId);
-  if (!tagId) return 0;
-  return prisma.trackTag.count({ where: { tagId } });
+export async function countSmartCollectionTracks(userId: string, tagId: string) {
+  return prisma.likedTrack.count({ where: await likedTracksMatchingTag(userId, tagId) });
 }

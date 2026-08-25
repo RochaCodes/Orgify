@@ -46,14 +46,14 @@ model Collection {
   /// Cleared when Spotify reports the playlist as deleted (404 on update).
   spotifyPlaylistId String?
   exportedAt        DateTime?
-  /// True when this collection's membership is computed from a SmartPlaylistRule
-  /// (e.g. "all liked tracks with tag X") rather than manual CollectionTrack rows.
-  isSmart     Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   trackItems        CollectionTrack[]
   playlistItems     CollectionPlaylist[]
+  /// Present iff this is a "smart" collection: membership is computed from the rule
+  /// instead of stored as CollectionTrack rows. Its presence *is* the smart flag —
+  /// there is deliberately no separate boolean that could disagree with it.
   smartPlaylistRule SmartPlaylistRule?
 
   @@index([userId])
@@ -68,7 +68,8 @@ model Tag {
   color     String?
   createdAt DateTime @default(now())
 
-  trackTags TrackTag[]
+  trackTags  TrackTag[]
+  smartRules SmartPlaylistRule[]
 
   @@unique([userId, name])
 }
@@ -114,16 +115,21 @@ model TrackTag {
   @@unique([tagId, spotifyTrackId])
 }
 
-/// User-defined rule for an auto-updating "smart" collection. Membership is computed live
-/// at read time from the rule rather than stored — see ruleJson shape in app/api/collections
-/// route handlers. Only `{"type":"tag","tagId":"<Tag.id>"}` is supported today; the JSON string
-/// leaves room for other rule types later without a schema migration.
+/// User-defined rule for an auto-updating "smart" collection: today, "every liked track
+/// carrying this tag". Membership is computed live at read time, never stored.
+///
+/// The tag is a real foreign key rather than an id inside a JSON blob so the database can
+/// enforce it: deleting the tag cascades the rule away, and the collection degrades into an
+/// ordinary empty collection instead of pointing at something that no longer exists.
 model SmartPlaylistRule {
   id           String     @id @default(cuid())
   collectionId String     @unique
   collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  ruleJson     String
+  tagId        String
+  tag          Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
   lastRunAt    DateTime?
+
+  @@index([tagId])
 }
 
 /// Local cache of the user's Spotify "liked songs" (GET /me/tracks), reconciled by a full
@@ -137,6 +143,11 @@ model LikedTrack {
   spotifyTrackId String
   trackName      String
   trackArtists   String
+  /// Unicode-lowercased copies of the two searchable fields. SQLite's LIKE and lower() only
+  /// fold ASCII, so "KAŽU" would not match "Kažu" without them; search lowercases the query
+  /// in JS and compares against these instead.
+  trackNameLower    String
+  trackArtistsLower String
   albumName      String
   albumImage     String?
   durationMs     Int
@@ -145,6 +156,6 @@ model LikedTrack {
   syncedAt       DateTime @default(now()) @updatedAt
 
   @@unique([userId, spotifyTrackId])
-  @@index([userId, trackName])
-  @@index([userId, trackArtists])
+  @@index([userId, trackNameLower])
+  @@index([userId, trackArtistsLower])
 }

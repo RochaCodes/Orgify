@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/db";
+import { boundedInt } from "@/lib/api/request";
 import { toTrackDtoFromRow, type PagedDto, type SavedTrackDto } from "@/lib/spotify/dto";
 import type { LikedTrack } from "@/app/generated/prisma/client";
 
@@ -10,21 +11,28 @@ function toSavedTrackDto(item: LikedTrack): SavedTrackDto {
 
 /**
  * Local search/paginate over the synced LikedTrack cache (see app/api/spotify/library/sync).
- * SQLite's LIKE — what Prisma's `contains` compiles to here — is case-insensitive for ASCII by
- * default, so no extra lower-casing is needed for typical searches.
+ * Matching runs against the *Lower columns with a JS-lowercased query, because SQLite folds
+ * only ASCII — "KAŽU" would otherwise miss "Kažu".
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return Response.json({ error: "Not authenticated" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
-  const limit = Math.min(50, Number(searchParams.get("limit") ?? 30));
-  const offset = Math.max(0, Number(searchParams.get("offset") ?? 0));
-  const q = searchParams.get("q")?.trim();
+  const limit = boundedInt(searchParams.get("limit"), { fallback: 30, min: 1, max: 50 });
+  const offset = boundedInt(searchParams.get("offset"), { fallback: 0, min: 0, max: Number.MAX_SAFE_INTEGER });
+  const q = searchParams.get("q")?.trim().toLowerCase();
 
   const where = {
     userId: user.id,
-    ...(q ? { OR: [{ trackName: { contains: q } }, { trackArtists: { contains: q } }] } : {}),
+    ...(q
+      ? {
+          OR: [
+            { trackNameLower: { contains: q } },
+            { trackArtistsLower: { contains: q } },
+          ],
+        }
+      : {}),
   };
 
   const [items, total, currentUser] = await Promise.all([

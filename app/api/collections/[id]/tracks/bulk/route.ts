@@ -1,11 +1,6 @@
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/db";
-
-async function requireOwnedCollection(userId: string, collectionId: string) {
-  const collection = await prisma.collection.findUnique({ where: { id: collectionId } });
-  if (!collection || collection.userId !== userId) return null;
-  return collection;
-}
+import { requireOwnedCollection, SMART_COLLECTION_READONLY_ERROR } from "@/lib/collections/ownership";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -14,8 +9,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const collection = await requireOwnedCollection(user.id, id);
   if (!collection) return Response.json({ error: "Not found" }, { status: 404 });
-  if (collection.isSmart) {
-    return Response.json({ error: "Smart collections don't support manual membership" }, { status: 400 });
+  if (collection.smartPlaylistRule) {
+    return Response.json({ error: SMART_COLLECTION_READONLY_ERROR }, { status: 400 });
   }
 
   const body = (await req.json()) as { trackIds?: string[] };
