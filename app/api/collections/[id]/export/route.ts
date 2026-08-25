@@ -4,7 +4,10 @@ import { spotifyFetch, SpotifyApiError } from "@/lib/spotify/client";
 
 interface CreatedPlaylist {
   id: string;
-  external_urls: { spotify: string };
+}
+
+interface PlaylistSnapshot {
+  snapshot_id: string;
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -31,31 +34,84 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return Response.json({ error: "Collection is empty" }, { status: 400 });
   }
 
-  try {
-    const playlist = await spotifyFetch<CreatedPlaylist>(`/users/${user.spotifyId}/playlists`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: collection.name,
-        description: collection.description ?? `Exported from Spotiganizer`,
-        public: false,
-      }),
-    });
-    if (!playlist) throw new SpotifyApiError(500, "Failed to create playlist");
+  const uris = items.map((i) => `spotify:track:${i.spotifyTrackId}`);
+  const description = collection.description ?? "Exported from Spotiganizer";
 
-    const uriBatches = chunk(
-      items.map((i) => `spotify:track:${i.spotifyTrackId}`),
-      100
-    );
-    for (const uris of uriBatches) {
-      await spotifyFetch(`/playlists/${playlist.id}/tracks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uris }),
-      });
+  try {
+    let playlistId = collection.spotifyPlaylistId;
+
+    if (playlistId) {
+      try {
+        await spotifyFetch(`/playlists/${playlistId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: collection.name, description, public: false }),
+        });
+      } catch (error) {
+        // The linked playlist no longer exists on Spotify's side — recreate it below.
+        if (error instanceof SpotifyApiError && error.status === 404) {
+          playlistId = null;
+        } else {
+          throw error;
+        }
+      }
     }
 
-    return Response.json({ spotifyUrl: playlist.external_urls.spotify });
+    if (!playlistId) {
+      const playlist = await spotifyFetch<CreatedPlaylist>(`/users/${user.spotifyId}/playlists`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: collection.name,
+          description,
+          public: false,
+        }),
+      });
+      if (!playlist?.id) throw new SpotifyApiError(500, "Failed to create playlist");
+      playlistId = playlist.id;
+    }
+    const created = collection.spotifyPlaylistId !== playlistId;
+
+    // Link the playlist as soon as it exists so a failed track sync can be retried
+    // against the same playlist instead of piling up duplicates.
+    await prisma.collection.update({
+      where: { id: collection.id },
+      data: { spotifyPlaylistId: playlistId },
+    });
+
+    // The first batch replaces the playlist's entire track list; any further
+    // batches are appended on top of it.
+    let syncedTracks = 0;
+    for (const [index, batch] of chunk(uris, 100).entries()) {
+      try {
+        await spotifyFetch<PlaylistSnapshot>(`/playlists/${playlistId}/tracks`, {
+          method: index === 0 ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ uris: batch }),
+        });
+        syncedTracks += batch.length;
+      } catch (error) {
+        if (error instanceof SpotifyApiError) {
+          throw new SpotifyApiError(
+            error.status,
+            `${error.message} (synced ${syncedTracks} of ${uris.length} tracks)`
+          );
+        }
+        throw error;
+      }
+    }
+
+    const exportedAt = new Date();
+    await prisma.collection.update({
+      where: { id: collection.id },
+      data: { exportedAt },
+    });
+
+    return Response.json({
+      spotifyUrl: `https://open.spotify.com/playlist/${playlistId}`,
+      created,
+      exportedAt: exportedAt.toISOString(),
+    });
   } catch (error) {
     if (error instanceof SpotifyApiError) {
       return Response.json({ error: error.message }, { status: error.status });
