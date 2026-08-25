@@ -1,28 +1,51 @@
 "use client";
 
+import type { ReactElement, ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useAssignTag, useTags, useTrackTagsMap, useUnassignTag } from "@/lib/tags/hooks";
-import { useAddTrackToCollection, useCollections } from "@/lib/collections/hooks";
+import { useAssignTag, useUnassignTag, type Tag } from "@/lib/tags/hooks";
+import { useAddTrackToCollection, type CollectionSummary } from "@/lib/collections/hooks";
 import type { TrackDto } from "@/lib/spotify/dto";
 
 /**
- * Single click-to-open popover for a track: add it to a collection and/or toggle tags on it,
- * as a faster alternative to dragging it onto a collection tile one at a time.
+ * Everything the popover reads. One popover is mounted per visible track row, so the queries behind
+ * this live in the track list instead: subscribing every row to them re-derived the same track-tag
+ * map dozens of times per render.
  */
-export function TrackQuickAddPopover({ track }: { track: TrackDto }) {
-  const { data: tags } = useTags();
-  const { map: trackTagsMap } = useTrackTagsMap();
+export interface TrackQuickAddData {
+  collections: CollectionSummary[];
+  tags: Tag[];
+  /** Ids of the tags already on this track. */
+  assignedTagIds: string[];
+}
+
+/**
+ * Single click-to-open popover for a track: add it to a collection and/or toggle tags on it,
+ * as a faster alternative to dragging it onto a collection tile one at a time. `trigger` is the
+ * whole track row, so clicking anywhere on a track opens it; rendering it through Base UI's
+ * `render` prop (rather than syncing an `open` state) is what lets a second click on the row close
+ * the popover instead of the outside-press dismissal and the click fighting each other.
+ */
+export function TrackQuickAddPopover({
+  track,
+  collections,
+  tags,
+  assignedTagIds,
+  trigger,
+  children,
+}: TrackQuickAddData & {
+  track: TrackDto;
+  trigger: ReactElement;
+  children: ReactNode;
+}) {
   const assignTag = useAssignTag();
   const unassignTag = useUnassignTag();
-  const { data: collections } = useCollections();
   const addToCollection = useAddTrackToCollection();
 
-  const assignedTagIds = new Set(trackTagsMap.get(track.id) ?? []);
-  const assignedTags = (tags ?? []).filter((t) => assignedTagIds.has(t.id));
+  const assigned = new Set(assignedTagIds);
 
   function toggleTag(tagId: string) {
-    if (assignedTagIds.has(tagId)) {
+    if (assigned.has(tagId)) {
       unassignTag.mutate({ trackId: track.id, tagId });
     } else {
       assignTag.mutate({ trackId: track.id, tagId });
@@ -31,28 +54,15 @@ export function TrackQuickAddPopover({ track }: { track: TrackDto }) {
 
   return (
     <Popover>
-      <PopoverTrigger
-        className="flex flex-wrap items-center gap-1 rounded text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {assignedTags.length > 0 ? (
-          assignedTags.map((tag) => (
-            <Badge key={tag.id} variant="secondary" className="text-[10px]">
-              {tag.name}
-            </Badge>
-          ))
-        ) : (
-          <span className="font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground">
-            + add
-          </span>
-        )}
+      <PopoverTrigger nativeButton={false} render={trigger}>
+        {children}
       </PopoverTrigger>
       <PopoverContent className="w-64 p-3" align="start">
         <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
           Add to collection
         </p>
         <div className="mb-3 flex flex-col gap-0.5">
-          {!collections || collections.length === 0 ? (
+          {collections.length === 0 ? (
             <p className="px-1 py-1 text-xs text-muted-foreground">No collections yet.</p>
           ) : (
             collections.map((c) => (
@@ -80,7 +90,7 @@ export function TrackQuickAddPopover({ track }: { track: TrackDto }) {
         <div className="mb-3 h-px bg-border" />
 
         <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Tags</p>
-        {!tags || tags.length === 0 ? (
+        {tags.length === 0 ? (
           <p className="px-1 py-1 text-xs text-muted-foreground">
             No tags yet. Create one in the collections panel.
           </p>
@@ -92,7 +102,7 @@ export function TrackQuickAddPopover({ track }: { track: TrackDto }) {
                 type="button"
                 onClick={() => toggleTag(tag.id)}
                 className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
-                  assignedTagIds.has(tag.id)
+                  assigned.has(tag.id)
                     ? "border-transparent bg-secondary text-secondary-foreground"
                     : "border-border text-muted-foreground hover:border-ring/50 hover:text-foreground"
                 }`}

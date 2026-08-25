@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 export interface Tag {
   id: string;
@@ -22,6 +22,17 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+/**
+ * A smart collection computes its membership from a tag rule, so every tag write can change which
+ * tracks a collection holds and what its trackCount says — the collection queries have to be
+ * refreshed alongside the tag data or the sidebar and the open collection go stale.
+ */
+export function invalidateAfterTagWrite(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: ["track-tags"] });
+  qc.invalidateQueries({ queryKey: ["collections"] });
+  qc.invalidateQueries({ queryKey: ["collection-tracks"] });
 }
 
 export function useTags() {
@@ -47,7 +58,7 @@ export function useDeleteTag() {
     mutationFn: (id: string) => fetchJson(`/api/tags/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tags"] });
-      qc.invalidateQueries({ queryKey: ["track-tags"] });
+      invalidateAfterTagWrite(qc);
     },
   });
 }
@@ -80,7 +91,7 @@ export function useAssignTag() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tagId }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["track-tags"] }),
+    onSuccess: () => invalidateAfterTagWrite(qc),
   });
 }
 
@@ -89,6 +100,6 @@ export function useUnassignTag() {
   return useMutation({
     mutationFn: ({ trackId, tagId }: { trackId: string; tagId: string }) =>
       fetchJson(`/api/tracks/${trackId}/tags?tagId=${tagId}`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["track-tags"] }),
+    onSuccess: () => invalidateAfterTagWrite(qc),
   });
 }

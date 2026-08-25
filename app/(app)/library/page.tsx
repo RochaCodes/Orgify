@@ -26,11 +26,17 @@ import {
   useBulkAddToCollection,
   useBulkAssignTag,
 } from "@/lib/library/hooks";
-import { useTags } from "@/lib/tags/hooks";
+import { useTags, useTrackTagsMap } from "@/lib/tags/hooks";
 import { formatSyncedAt } from "@/lib/format";
 import type { TrackDto } from "@/lib/spotify/dto";
 
 const PAGE_SIZE = 30;
+// Shared so rows without tags don't each allocate their own empty array on every render.
+const NO_TAG_IDS: string[] = [];
+
+function trackCountLabel(count: number) {
+  return `${count} ${count === 1 ? "track" : "tracks"}`;
+}
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -45,15 +51,26 @@ function LibraryTracksTab() {
   const [offset, setOffset] = useState(0);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
-  const { data, isLoading, isError, error } = useLikedTracks(offset, PAGE_SIZE, debouncedSearch);
+  const { data, isLoading, isPlaceholderData, isError, error } = useLikedTracks(
+    offset,
+    PAGE_SIZE,
+    debouncedSearch
+  );
   const syncLikedTracks = useSyncLikedTracks();
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const { data: collections } = useCollections();
-  const { data: tags } = useTags();
+  const [bulkResult, setBulkResult] = useState<string | null>(null);
   const bulkAddToCollection = useBulkAddToCollection();
   const bulkAssignTag = useBulkAssignTag();
+
+  // Read once for the whole list: every row's quick-add popover needs these, and mounting the
+  // queries per row also re-derived the track-tag map once per row on every render.
+  const { data: collectionsData } = useCollections();
+  const { data: tagsData } = useTags();
+  const { map: trackTagsMap } = useTrackTagsMap();
+  const collections = collectionsData ?? [];
+  const tags = tagsData ?? [];
 
   // Reset pagination when the search term changes, without an extra render pass.
   const [prevSearch, setPrevSearch] = useState(debouncedSearch);
@@ -74,6 +91,12 @@ function LibraryTracksTab() {
   function exitSelectMode() {
     setSelectMode(false);
     setSelectedIds(new Set());
+  }
+
+  function clearBulkFeedback() {
+    setBulkResult(null);
+    bulkAddToCollection.reset();
+    bulkAssignTag.reset();
   }
 
   const isFirstRunEmpty = !data?.syncedAt && !debouncedSearch && data?.total === 0;
@@ -106,7 +129,11 @@ function LibraryTracksTab() {
           variant={selectMode ? "secondary" : "ghost"}
           size="sm"
           className="ml-auto"
-          onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+          onClick={() => {
+            clearBulkFeedback();
+            if (selectMode) exitSelectMode();
+            else setSelectMode(true);
+          }}
         >
           {selectMode ? "Cancel" : "Select"}
         </Button>
@@ -116,6 +143,14 @@ function LibraryTracksTab() {
       {syncLikedTracks.isError && (
         <p className="text-sm text-destructive">{(syncLikedTracks.error as Error).message}</p>
       )}
+      {/* Outside the action bar: a successful bulk action closes select mode, which unmounts it. */}
+      {bulkAddToCollection.isError && (
+        <p className="text-sm text-destructive">{(bulkAddToCollection.error as Error).message}</p>
+      )}
+      {bulkAssignTag.isError && (
+        <p className="text-sm text-destructive">{(bulkAssignTag.error as Error).message}</p>
+      )}
+      {bulkResult && <p className="text-sm text-muted-foreground">{bulkResult}</p>}
 
       {selectMode && selectedIds.size > 0 && (
         <Card className="flex flex-wrap items-center gap-2 p-2">
@@ -125,17 +160,27 @@ function LibraryTracksTab() {
             defaultValue=""
             disabled={bulkAddToCollection.isPending}
             onChange={(e) => {
-              const collectionId = e.target.value;
-              if (!collectionId) return;
-              bulkAddToCollection.mutate({ collectionId, trackIds: Array.from(selectedIds) });
+              const collection = collections.find((c) => c.id === e.target.value);
+              if (!collection) return;
               e.target.value = "";
+              clearBulkFeedback();
+              const trackIds = Array.from(selectedIds);
+              bulkAddToCollection.mutate(
+                { collectionId: collection.id, trackIds },
+                {
+                  onSuccess: () => {
+                    setBulkResult(`Added ${trackCountLabel(trackIds.length)} to ${collection.name}.`);
+                    exitSelectMode();
+                  },
+                }
+              );
             }}
           >
             <option value="" disabled>
               Add to collection…
             </option>
             {collections
-              ?.filter((c) => !c.isSmart)
+              .filter((c) => !c.isSmart)
               .map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -147,16 +192,26 @@ function LibraryTracksTab() {
             defaultValue=""
             disabled={bulkAssignTag.isPending}
             onChange={(e) => {
-              const tagId = e.target.value;
-              if (!tagId) return;
-              bulkAssignTag.mutate({ tagId, trackIds: Array.from(selectedIds) });
+              const tag = tags.find((t) => t.id === e.target.value);
+              if (!tag) return;
               e.target.value = "";
+              clearBulkFeedback();
+              const trackIds = Array.from(selectedIds);
+              bulkAssignTag.mutate(
+                { tagId: tag.id, trackIds },
+                {
+                  onSuccess: () => {
+                    setBulkResult(`Tagged ${trackCountLabel(trackIds.length)} with ${tag.name}.`);
+                    exitSelectMode();
+                  },
+                }
+              );
             }}
           >
             <option value="" disabled>
               Add tag…
             </option>
-            {tags?.map((tag) => (
+            {tags.map((tag) => (
               <option key={tag.id} value={tag.id}>
                 {tag.name}
               </option>
@@ -175,15 +230,25 @@ function LibraryTracksTab() {
             Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="h-14 w-full rounded-none border-b border-border/60 last:border-b-0" />
             ))}
-          {data?.items.length === 0 && !isLoading && (
+          {/* Placeholder data is the previous page's, so its emptiness says nothing about this one. */}
+          {data?.items.length === 0 && !isLoading && !isPlaceholderData && (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              No liked songs match &ldquo;{debouncedSearch}&rdquo;.
+              {debouncedSearch ? (
+                <>No liked songs match &ldquo;{debouncedSearch}&rdquo;.</>
+              ) : (
+                "No liked songs in your library. Like some on Spotify, then sync again."
+              )}
             </p>
           )}
           {data?.items.map((item) => (
             <TrackCard
               key={item.track.id}
               track={item.track}
+              quickAdd={{
+                collections,
+                tags,
+                assignedTagIds: trackTagsMap.get(item.track.id) ?? NO_TAG_IDS,
+              }}
               selectable={selectMode}
               selected={selectedIds.has(item.track.id)}
               onToggleSelect={() => toggleSelected(item.track.id)}

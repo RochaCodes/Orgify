@@ -1,6 +1,7 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateAfterTagWrite } from "@/lib/tags/hooks";
 import type { PagedDto, SavedTrackDto } from "@/lib/spotify/dto";
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -22,6 +23,9 @@ export function useLikedTracks(offset: number, limit: number, q: string) {
       fetchJson<LikedTracksPagedDto>(
         `/api/tracks/liked?offset=${offset}&limit=${limit}${q ? `&q=${encodeURIComponent(q)}` : ""}`
       ),
+    // Offset and query are part of the key, so paging or typing would otherwise drop back to the
+    // loading state and flash skeletons over the rows the user is still reading.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -29,9 +33,12 @@ export function useSyncLikedTracks() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      fetchJson<{ syncedAt: string; count: number }>("/api/spotify/library/sync", {
-        method: "POST",
-      }),
+      // `complete` is false when Spotify cut the pagination short; `syncedAt` then keeps the
+      // previous run's value, and is null if no run ever completed.
+      fetchJson<{ syncedAt: string | null; count: number; complete: boolean }>(
+        "/api/spotify/library/sync",
+        { method: "POST" }
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["liked-tracks"] }),
   });
 }
@@ -61,6 +68,6 @@ export function useBulkAssignTag() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ trackIds, tagId }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["track-tags"] }),
+    onSuccess: () => invalidateAfterTagWrite(qc),
   });
 }
