@@ -13,7 +13,7 @@ function formatMs(ms: number) {
 }
 
 export function NowPlayingTile() {
-  const { data, isLoading } = useNowPlaying();
+  const { data, isLoading, isError, error } = useNowPlaying();
 
   if (isLoading) {
     return (
@@ -26,6 +26,20 @@ export function NowPlayingTile() {
             <Skeleton className="h-3 w-28" />
           </div>
         </div>
+      </Card>
+    );
+  }
+
+  // Distinguishes a failing poll from an idle player — both leave `data` empty otherwise.
+  if (isError) {
+    return (
+      <Card className="border-dashed">
+        <CardContent className="flex flex-col items-center justify-center gap-1 py-10 text-center">
+          <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+            now playing
+          </span>
+          <p className="text-sm text-destructive">{(error as Error).message}</p>
+        </CardContent>
       </Card>
     );
   }

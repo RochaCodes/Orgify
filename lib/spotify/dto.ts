@@ -1,9 +1,10 @@
 import type {
   SpotifyCurrentlyPlayingResponse,
   SpotifyPagingResponse,
+  SpotifyPlayableItem,
   SpotifyPlaylist,
+  SpotifyRecentlyPlayedItem,
   SpotifyRecentlyPlayedResponse,
-  SpotifySavedTrackItem,
   SpotifyTrack,
 } from "./types";
 
@@ -28,6 +29,10 @@ export interface RecentlyPlayedItemDto {
   playedAt: string;
 }
 
+/**
+ * A liked song. Built from the local LikedTrack cache (app/api/tracks/liked), not from
+ * /me/tracks — the library reads the cache so it can search and paginate offline.
+ */
 export interface SavedTrackDto {
   track: TrackDto;
   addedAt: string;
@@ -49,6 +54,25 @@ export interface PagedDto<T> {
   limit: number;
   offset: number;
   hasMore: boolean;
+}
+
+/**
+ * Narrows what the player actually returned to a real catalog track. Podcast episodes have no
+ * `artists`/`album` and local files have no id and no public URL, so neither can become a
+ * TrackDto: the app keys collections, tags and the drag-and-drop ids off the Spotify track id,
+ * and a placeholder-filled entry would just be an item the user can drag somewhere and never
+ * resolve again. Callers drop what this rejects, the same way toPlaylistsPagedDto drops the
+ * `null` entries Spotify returns for inaccessible playlists.
+ */
+function isSpotifyTrack(item: SpotifyPlayableItem | null | undefined): item is SpotifyTrack {
+  return (
+    item != null &&
+    typeof item.id === "string" &&
+    item.id !== "" &&
+    Array.isArray(item.artists) &&
+    item.album != null &&
+    typeof item.external_urls?.spotify === "string"
+  );
 }
 
 export function toTrackDto(track: SpotifyTrack): TrackDto {
@@ -91,7 +115,9 @@ export function toTrackDtoFromRow(row: {
 export function toNowPlayingDto(
   response: SpotifyCurrentlyPlayingResponse | null
 ): NowPlayingDto | null {
-  if (!response?.item) return null;
+  // A podcast episode or a local file is playing as far as Spotify is concerned, but there is
+  // no TrackDto that can describe it — report "nothing playing" instead of failing the poll.
+  if (!response || !isSpotifyTrack(response.item)) return null;
   return {
     isPlaying: response.is_playing,
     progressMs: response.progress_ms ?? 0,
@@ -103,24 +129,14 @@ export function toRecentlyPlayedDto(
   response: SpotifyRecentlyPlayedResponse | null
 ): RecentlyPlayedItemDto[] {
   if (!response) return [];
-  return response.items.map((item) => ({
-    track: toTrackDto(item.track),
-    playedAt: item.played_at,
-  }));
-}
-
-export function toSavedTracksPagedDto(
-  response: SpotifyPagingResponse<SpotifySavedTrackItem>
-): PagedDto<SavedTrackDto> {
-  return {
-    items: response.items
-      .filter((item) => item.track)
-      .map((item) => ({ track: toTrackDto(item.track), addedAt: item.added_at })),
-    total: response.total,
-    limit: response.limit,
-    offset: response.offset,
-    hasMore: response.next !== null,
-  };
+  return response.items
+    .filter((item): item is SpotifyRecentlyPlayedItem & { track: SpotifyTrack } =>
+      isSpotifyTrack(item.track)
+    )
+    .map((item) => ({
+      track: toTrackDto(item.track),
+      playedAt: item.played_at,
+    }));
 }
 
 function toPlaylistDto(playlist: SpotifyPlaylist): PlaylistDto {

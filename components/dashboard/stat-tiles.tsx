@@ -26,7 +26,7 @@ function formatDuration(ms: number) {
 }
 
 export function StatTiles() {
-  const { data, isLoading } = useRecentlyPlayed();
+  const { data, isLoading, isError, error } = useRecentlyPlayed();
 
   const stats = useMemo(() => {
     if (!data || data.length === 0) return null;
@@ -61,6 +61,11 @@ export function StatTiles() {
       totalMs,
     };
   }, [data]);
+
+  if (isError) {
+    // Without this the tiles just read "0" and "—", which is indistinguishable from a quiet day.
+    return <p className="text-sm text-destructive">{(error as Error).message}</p>;
+  }
 
   if (isLoading) {
     return (
