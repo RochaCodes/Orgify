@@ -107,7 +107,10 @@ New Spotify features usually need a new scope in `lib/spotify/scopes.ts`, which 
 
 - The project is English-only (UI copy, code, comments, docs) — it is a public repo. Dates and times render
   with the `en-GB` locale.
-- Dark theme is hardcoded (`className="dark"` on `<html>`) — there is no theme toggle.
+- Theming uses `next-themes` with the class strategy (`attribute="class"`, `defaultTheme="dark"`,
+  system preference disabled). The toggle lives in `components/theme-toggle.tsx` and sits in the app
+  header. `<html>` has `suppressHydrationWarning` because next-themes mutates its class pre-hydration.
+  Both palettes live in `app/globals.css` (`:root` = light, `.dark` = dark).
 - shadcn/ui with the `base-nova` style over `@base-ui/react`; components go in `components/ui/` via
   `npx shadcn@latest add <component>`. Feature components live in `components/{dashboard,library}/`.
 - Remote images are restricted to the Spotify CDN hosts allowlisted in `next.config.ts`; a new image host
