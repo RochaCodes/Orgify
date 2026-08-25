@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Spotify Organizer",
+  title: "Spotiganizer",
   description: "Organize your Spotify library with a minimal HUD.",
 };
 

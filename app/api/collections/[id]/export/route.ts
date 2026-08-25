@@ -37,7 +37,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: collection.name,
-        description: collection.description ?? `Exported from Spotify Organizer`,
+        description: collection.description ?? `Exported from Spotiganizer`,
         public: false,
       }),
     });

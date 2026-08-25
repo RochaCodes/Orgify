@@ -1,4 +1,4 @@
-# Spotify Organizer
+# Spotiganizer
 
 A personal app for organizing your Spotify library and playlists more freely than Spotify allows natively,
 with a minimal "HUD" dashboard for tracking what you're listening to.
