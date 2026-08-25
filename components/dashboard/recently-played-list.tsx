@@ -12,7 +12,7 @@ function formatTime(iso: string) {
 }
 
 export function RecentlyPlayedList() {
-  const { data, isLoading } = useRecentlyPlayed();
+  const { data, isLoading, isError, error } = useRecentlyPlayed();
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -44,7 +44,13 @@ export function RecentlyPlayedList() {
               </div>
             ))}
 
-          {!isLoading && data?.length === 0 && (
+          {isError && (
+            <p className="py-4 text-center text-sm text-destructive">
+              {(error as Error).message}
+            </p>
+          )}
+
+          {!isLoading && !isError && data?.length === 0 && (
             <p className="py-4 text-center text-sm text-muted-foreground">
               No recent activity yet.
             </p>
