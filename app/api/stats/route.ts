@@ -1,6 +1,28 @@
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/db";
 
+/** Expands the sparse month buckets into a contiguous run, so the chart's evenly-spaced
+ * bars stay proportional to elapsed time instead of collapsing empty months away. Works on
+ * the same UTC basis as the bucketing below — local dates would drift by a month near the
+ * start/end of a month for anyone east or west of UTC. */
+function fillMonthGaps(monthCounts: Map<string, number>) {
+  const months = [...monthCounts.keys()].sort();
+  const first = months[0];
+  const last = months[months.length - 1];
+  if (!first || !last) return [];
+
+  const series: { month: string; count: number }[] = [];
+  const cursor = new Date(`${first}-01T00:00:00.000Z`);
+  const end = new Date(`${last}-01T00:00:00.000Z`);
+  while (cursor <= end) {
+    const month = cursor.toISOString().slice(0, 7);
+    series.push({ month, count: monthCounts.get(month) ?? 0 });
+    // Always on day 1, so this rolls over the year without overflowing into the next month.
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return series;
+}
+
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return Response.json({ error: "Not authenticated" }, { status: 401 });
@@ -34,9 +56,7 @@ export async function GET() {
     .slice(0, 10)
     .map(([artist, count]) => ({ artist, count }));
 
-  const likedOverTime = [...monthCounts.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, count]) => ({ month, count }));
+  const likedOverTime = fillMonthGaps(monthCounts);
 
   const tagNameById = new Map(tags.map((t) => [t.id, t.name]));
   const tagDistribution = tagRows
