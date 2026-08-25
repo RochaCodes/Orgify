@@ -37,3 +37,38 @@ export interface SpotifyRecentlyPlayedItem {
 export interface SpotifyRecentlyPlayedResponse {
   items: SpotifyRecentlyPlayedItem[];
 }
+
+export interface SpotifySavedTrackItem {
+  added_at: string;
+  track: SpotifyTrack;
+}
+
+export interface SpotifyPagingResponse<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+  next: string | null;
+}
+
+export interface SpotifyTracksResponse {
+  tracks: (SpotifyTrack | null)[];
+}
+
+export interface SpotifyPlaylistOwner {
+  display_name: string | null;
+}
+
+export interface SpotifyPlaylist {
+  id: string;
+  name: string;
+  description: string | null;
+  images: SpotifyImage[];
+  owner: SpotifyPlaylistOwner;
+  tracks: { total: number };
+  external_urls: { spotify: string };
+}
+
+export interface SpotifyCurrentUser {
+  id: string;
+}

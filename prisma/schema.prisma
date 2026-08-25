@@ -59,11 +59,21 @@ model Tag {
   @@unique([userId, name])
 }
 
+/// Denormalized track display fields (name/artists/albumImage/durationMs/spotifyUrl) are
+/// snapshotted here at add-time instead of being re-fetched from Spotify by ID, because
+/// Spotify's Get Track(s) catalog endpoint (GET /tracks) returns 403 for apps in
+/// Development Mode without Extended Quota access (confirmed 2026-07-28). This deviates
+/// from the original "never mirror Spotify data" design, but that endpoint isn't usable.
 model CollectionTrack {
   id             String     @id @default(cuid())
   collectionId   String
   collection     Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   spotifyTrackId String
+  trackName      String
+  trackArtists   String
+  albumImage     String?
+  durationMs     Int
+  spotifyUrl     String
   addedAt        DateTime   @default(now())
   position       Int?
 

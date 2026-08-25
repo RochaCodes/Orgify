@@ -18,6 +18,13 @@ function StatTile({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatDuration(ms: number) {
+  const totalMinutes = Math.round(ms / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
 export function StatTiles() {
   const { data, isLoading } = useRecentlyPlayed();
 
@@ -28,40 +35,53 @@ export function StatTiles() {
     const playedToday = data.filter((item) => new Date(item.playedAt).toDateString() === today);
 
     const artistCounts = new Map<string, number>();
+    const trackCounts = new Map<string, { name: string; count: number }>();
+    let totalMs = 0;
+
     for (const item of data) {
       const artist = item.track.artists.split(",")[0]?.trim();
-      if (!artist) continue;
-      artistCounts.set(artist, (artistCounts.get(artist) ?? 0) + 1);
+      if (artist) artistCounts.set(artist, (artistCounts.get(artist) ?? 0) + 1);
+
+      const existing = trackCounts.get(item.track.id);
+      trackCounts.set(item.track.id, {
+        name: item.track.name,
+        count: (existing?.count ?? 0) + 1,
+      });
+
+      totalMs += item.track.durationMs;
     }
+
     const topArtist = [...artistCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+    const topTrack = [...trackCounts.values()].sort((a, b) => b.count - a.count)[0]?.name ?? "—";
 
     return {
       playedToday: playedToday.length,
       topArtist,
+      topTrack,
+      totalMs,
     };
   }, [data]);
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-3">
-        <Card>
-          <CardContent className="p-4">
-            <Skeleton className="h-10 w-full" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <Skeleton className="h-10 w-full" />
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Card key={i}>
+            <CardContent className="p-4">
+              <Skeleton className="h-10 w-full" />
+            </CardContent>
+          </Card>
+        ))}
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <StatTile label="Faixas hoje" value={String(stats?.playedToday ?? 0)} />
-      <StatTile label="Artista recorrente" value={stats?.topArtist ?? "—"} />
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <StatTile label="Tracks today" value={String(stats?.playedToday ?? 0)} />
+      <StatTile label="Top artist" value={stats?.topArtist ?? "—"} />
+      <StatTile label="Top track" value={stats?.topTrack ?? "—"} />
+      <StatTile label="Listening time (recent)" value={stats ? formatDuration(stats.totalMs) : "—"} />
     </div>
   );
 }

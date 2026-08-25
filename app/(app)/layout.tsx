@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,9 +17,19 @@ export default async function AppLayout({
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
       <header className="flex items-center justify-between border-b border-border px-6 py-3">
-        <span className="font-mono text-xs uppercase tracking-[0.3em] text-muted-foreground">
-          spotify organizer
-        </span>
+        <div className="flex items-center gap-6">
+          <span className="font-mono text-xs uppercase tracking-[0.3em] text-muted-foreground">
+            spotify organizer
+          </span>
+          <nav className="flex items-center gap-4 text-sm">
+            <Link href="/dashboard" className="text-muted-foreground hover:text-foreground">
+              Dashboard
+            </Link>
+            <Link href="/library" className="text-muted-foreground hover:text-foreground">
+              Library
+            </Link>
+          </nav>
+        </div>
         <div className="flex items-center gap-3">
           <Avatar className="size-7">
             <AvatarImage src={session.user.image ?? undefined} alt={session.user.name ?? "User"} />
@@ -31,7 +42,7 @@ export default async function AppLayout({
             }}
           >
             <Button type="submit" variant="ghost" size="sm">
-              Sair
+              Sign out
             </Button>
           </form>
         </div>

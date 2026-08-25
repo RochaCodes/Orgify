@@ -15,11 +15,11 @@ export default async function Home() {
           spotify organizer
         </span>
         <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-          O teu HUD para a biblioteca Spotify
+          Your HUD for the Spotify library
         </h1>
         <p className="max-w-md text-sm text-muted-foreground">
-          Liga a tua conta Spotify para organizar playlists, ver o que estás a
-          ouvir em tempo real e receber sugestões baseadas nas tuas coleções.
+          Connect your Spotify account to organize playlists, see what you are
+          listening to in real time, and get suggestions based on your collections.
         </p>
       </div>
       <form
@@ -29,7 +29,7 @@ export default async function Home() {
         }}
       >
         <Button type="submit" size="lg" className="gap-2">
-          Entrar com Spotify
+          Sign in with Spotify
         </Button>
       </form>
     </div>

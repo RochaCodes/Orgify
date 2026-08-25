@@ -37,7 +37,7 @@ export function NowPlayingTile() {
           <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
             now playing
           </span>
-          <p className="text-sm text-muted-foreground">Nada a tocar de momento.</p>
+          <p className="text-sm text-muted-foreground">Nothing playing right now.</p>
         </CardContent>
       </Card>
     );
@@ -68,7 +68,7 @@ export function NowPlayingTile() {
               }`}
             />
             <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-              {isPlaying ? "now playing" : "pausado"}
+              {isPlaying ? "now playing" : "paused"}
             </span>
           </div>
           <p className="truncate text-sm font-medium text-foreground">{track.name}</p>

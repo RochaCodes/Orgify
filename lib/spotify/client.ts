@@ -33,6 +33,7 @@ export async function spotifyFetch<T>(path: string, init?: RequestInit): Promise
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
+    console.error(`Spotify API error ${res.status} for ${path}: ${body}`);
     throw new SpotifyApiError(res.status, body || res.statusText);
   }
 
