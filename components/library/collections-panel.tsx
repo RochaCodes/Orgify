@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CollectionDropTile } from "@/components/library/collection-drop-tile";
 import {
@@ -16,6 +17,7 @@ import {
   useExportCollection,
 } from "@/lib/collections/hooks";
 import { useCreateTag, useDeleteTag, useTags } from "@/lib/tags/hooks";
+import { formatSyncedAt } from "@/lib/format";
 
 export function CollectionsPanel({
   selectedId,
@@ -28,6 +30,7 @@ export function CollectionsPanel({
   const createCollection = useCreateCollection();
   const deleteCollection = useDeleteCollection();
   const [newName, setNewName] = useState("");
+  const [smartTagId, setSmartTagId] = useState("");
 
   const { data: resolvedTracks } = useCollectionTracks(selectedId);
   const removeTrack = useRemoveTrackFromCollection();
@@ -41,16 +44,20 @@ export function CollectionsPanel({
   const selectedCollection = collections?.find((c) => c.id === selectedId);
   const isSynced = !!selectedCollection?.spotifyPlaylistId;
 
-  function formatSyncedAt(iso: string) {
-    return new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
-  }
-
   function handleCreateCollection(e: React.FormEvent) {
     e.preventDefault();
     const name = newName.trim();
     if (!name) return;
     createCollection.mutate(name);
     setNewName("");
+  }
+
+  function handleCreateSmartCollection(e: React.FormEvent) {
+    e.preventDefault();
+    if (!smartTagId) return;
+    const tagName = tags?.find((t) => t.id === smartTagId)?.name ?? "";
+    createCollection.mutate({ name: `Tagged: ${tagName}`, isSmart: true, tagId: smartTagId });
+    setSmartTagId("");
   }
 
   function handleCreateTag(e: React.FormEvent) {
@@ -81,6 +88,26 @@ export function CollectionsPanel({
               +
             </Button>
           </form>
+
+          {tags && tags.length > 0 && (
+            <form onSubmit={handleCreateSmartCollection} className="flex gap-2">
+              <select
+                value={smartTagId}
+                onChange={(e) => setSmartTagId(e.target.value)}
+                className="h-8 flex-1 rounded-md border border-input bg-transparent px-2 text-sm transition-colors hover:border-ring/50 focus-visible:border-ring focus-visible:outline-none"
+              >
+                <option value="">New smart collection from tag…</option>
+                {tags.map((tag) => (
+                  <option key={tag.id} value={tag.id}>
+                    {tag.name}
+                  </option>
+                ))}
+              </select>
+              <Button type="submit" size="sm" variant="outline" disabled={!smartTagId}>
+                +
+              </Button>
+            </form>
+          )}
 
           {(collectionsError || createCollection.error) && (
             <p className="text-xs text-destructive">
@@ -133,7 +160,14 @@ export function CollectionsPanel({
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-              <span className="truncate">{selectedCollection.name}</span>
+              <span className="flex min-w-0 items-center gap-1.5 truncate">
+                {selectedCollection.name}
+                {selectedCollection.isSmart && (
+                  <Badge variant="secondary" className="shrink-0 text-[9px] normal-case tracking-normal">
+                    Smart
+                  </Badge>
+                )}
+              </span>
               <Button
                 type="button"
                 variant="outline"
@@ -168,7 +202,9 @@ export function CollectionsPanel({
             )}
             {!resolvedTracks || resolvedTracks.length === 0 ? (
               <p className="py-4 text-center text-xs text-muted-foreground">
-                No tracks in this collection yet. Drag one in from the library.
+                {selectedCollection.isSmart
+                  ? "No liked songs carry this tag yet."
+                  : "No tracks in this collection yet. Drag one in from the library."}
               </p>
             ) : (
               resolvedTracks.map((track) => (
@@ -187,16 +223,18 @@ export function CollectionsPanel({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs text-foreground">{track.name}</p>
                   </div>
-                  <button
-                    type="button"
-                    className="shrink-0 text-xs text-muted-foreground hover:text-destructive"
-                    onClick={() =>
-                      removeTrack.mutate({ collectionId: selectedCollection.id, spotifyTrackId: track.id })
-                    }
-                    aria-label="Remove"
-                  >
-                    ×
-                  </button>
+                  {!selectedCollection.isSmart && (
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs text-muted-foreground transition-colors hover:text-destructive"
+                      onClick={() =>
+                        removeTrack.mutate({ collectionId: selectedCollection.id, spotifyTrackId: track.id })
+                      }
+                      aria-label="Remove"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               ))
             )}
@@ -234,7 +272,7 @@ export function CollectionsPanel({
                 key={tag.id}
                 type="button"
                 onClick={() => deleteTag.mutate(tag.id)}
-                className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground hover:border-destructive hover:text-destructive"
+                className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-destructive hover:text-destructive"
                 title="Delete tag"
               >
                 {tag.name} ×

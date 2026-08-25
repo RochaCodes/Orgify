@@ -91,6 +91,10 @@ around them rather than calling them:
   denormalized fields — see the schema comment before changing this.
 - `/recommendations`, `/audio-features`, `/related-artists` are unavailable; the planned suggestion engine
   must use genre/artist overlap instead.
+- Spotify's February 2026 Dev Mode migration renamed the playlist endpoints — the legacy names now return
+  plain `403 Forbidden` (not an "insufficient scope" error) in Development Mode:
+  - `POST /users/{id}/playlists` → `POST /me/playlists`
+  - `{GET,POST,PUT} /playlists/{id}/tracks` → `{GET,POST,PUT} /playlists/{id}/items`
 
 New Spotify features usually need a new scope in `lib/spotify/scopes.ts`, which forces a re-consent.
 

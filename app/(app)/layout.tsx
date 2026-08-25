@@ -22,11 +22,23 @@ export default async function AppLayout({
             spotify organizer
           </span>
           <nav className="flex items-center gap-4 text-sm">
-            <Link href="/dashboard" className="text-muted-foreground hover:text-foreground">
+            <Link
+              href="/dashboard"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
               Dashboard
             </Link>
-            <Link href="/library" className="text-muted-foreground hover:text-foreground">
+            <Link
+              href="/library"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
               Library
+            </Link>
+            <Link
+              href="/stats"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Stats
             </Link>
           </nav>
         </div>

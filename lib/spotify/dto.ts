@@ -63,6 +63,31 @@ export function toTrackDto(track: SpotifyTrack): TrackDto {
   };
 }
 
+/**
+ * Maps a denormalized track row (LikedTrack, CollectionTrack) back to a TrackDto. Both
+ * models snapshot the same fields for the same reason (see prisma/schema.prisma) — this is
+ * the single shared mapper for that shape, used instead of a per-route re-implementation.
+ */
+export function toTrackDtoFromRow(row: {
+  spotifyTrackId: string;
+  trackName: string;
+  trackArtists: string;
+  albumName?: string | null;
+  albumImage: string | null;
+  durationMs: number;
+  spotifyUrl: string;
+}): TrackDto {
+  return {
+    id: row.spotifyTrackId,
+    name: row.trackName,
+    artists: row.trackArtists,
+    albumName: row.albumName ?? "",
+    albumImage: row.albumImage,
+    durationMs: row.durationMs,
+    spotifyUrl: row.spotifyUrl,
+  };
+}
+
 export function toNowPlayingDto(
   response: SpotifyCurrentlyPlayingResponse | null
 ): NowPlayingDto | null {

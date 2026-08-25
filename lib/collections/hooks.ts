@@ -11,6 +11,7 @@ export interface CollectionSummary {
   icon: string | null;
   spotifyPlaylistId: string | null;
   exportedAt: string | null;
+  isSmart: boolean;
   trackCount: number;
   playlistCount: number;
 }
@@ -35,11 +36,11 @@ export function useCollections() {
 export function useCreateCollection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) =>
+    mutationFn: (input: string | { name: string; isSmart?: boolean; tagId?: string }) =>
       fetchJson<CollectionSummary>("/api/collections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify(typeof input === "string" ? { name: input } : input),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["collections"] }),
   });

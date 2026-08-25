@@ -53,7 +53,7 @@ export function RecentlyPlayedList() {
           {data?.map((item, index) => (
             <div
               key={`${item.track.id}-${item.playedAt}-${index}`}
-              className="flex items-center gap-3 py-1.5"
+              className="-mx-2 flex items-center gap-3 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/30"
             >
               {item.track.albumImage ? (
                 <Image

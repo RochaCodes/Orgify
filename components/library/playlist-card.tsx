@@ -15,7 +15,7 @@ export function PlaylistCard({
   onAddToCollection: (collectionId: string) => void;
 }) {
   return (
-    <Card className="flex items-center gap-3 p-3">
+    <Card className="flex items-center gap-3 p-3 transition-colors hover:border-ring/50 hover:bg-muted/30">
       {playlist.image ? (
         <Image
           src={playlist.image}
@@ -35,7 +35,7 @@ export function PlaylistCard({
       </div>
       {collections.length > 0 && (
         <select
-          className="shrink-0 rounded-md border border-border bg-background px-1.5 py-1 text-xs text-foreground"
+          className="shrink-0 rounded-md border border-border bg-background px-1.5 py-1 text-xs text-foreground transition-colors hover:border-ring/50 focus-visible:border-ring focus-visible:outline-none"
           defaultValue=""
           onChange={(e) => {
             if (e.target.value) onAddToCollection(e.target.value);
