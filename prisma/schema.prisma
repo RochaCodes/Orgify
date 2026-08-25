@@ -22,10 +22,13 @@ model User {
   accessToken        String?
   accessTokenExpires DateTime?
   refreshTokenEnc    String?
+  /// Set when a full liked-songs sync (see LikedTrack) last completed successfully.
+  likedTracksSyncedAt DateTime?
   createdAt          DateTime @default(now())
 
   collections Collection[]
   tags        Tag[]
+  likedTracks LikedTrack[]
 }
 
 /// A user-defined "folder" grouping saved tracks and/or playlists by Spotify ID,
@@ -43,6 +46,9 @@ model Collection {
   /// Cleared when Spotify reports the playlist as deleted (404 on update).
   spotifyPlaylistId String?
   exportedAt        DateTime?
+  /// True when this collection's membership is computed from a SmartPlaylistRule
+  /// (e.g. "all liked tracks with tag X") rather than manual CollectionTrack rows.
+  isSmart     Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -108,11 +114,37 @@ model TrackTag {
   @@unique([tagId, spotifyTrackId])
 }
 
-/// Phase 4+: user-defined rules for an auto-updating "smart" collection.
+/// User-defined rule for an auto-updating "smart" collection. Membership is computed live
+/// at read time from the rule rather than stored — see ruleJson shape in app/api/collections
+/// route handlers. Only `{"type":"tag","tagId":"<Tag.id>"}` is supported today; the JSON string
+/// leaves room for other rule types later without a schema migration.
 model SmartPlaylistRule {
   id           String     @id @default(cuid())
   collectionId String     @unique
   collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   ruleJson     String
   lastRunAt    DateTime?
+}
+
+/// Local cache of the user's Spotify "liked songs" (GET /me/tracks), reconciled by a full
+/// sync run (app/api/spotify/library/sync). Denormalized for the same reason as CollectionTrack
+/// (see comment above) — but this is a full cache, not a snapshot-on-add: every sync upserts
+/// touched rows and sweeps any row whose syncedAt predates that run (i.e. no longer liked).
+model LikedTrack {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  spotifyTrackId String
+  trackName      String
+  trackArtists   String
+  albumName      String
+  albumImage     String?
+  durationMs     Int
+  spotifyUrl     String
+  addedAt        DateTime
+  syncedAt       DateTime @default(now()) @updatedAt
+
+  @@unique([userId, spotifyTrackId])
+  @@index([userId, trackName])
+  @@index([userId, trackArtists])
 }
