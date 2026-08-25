@@ -38,6 +38,11 @@ model Collection {
   description String?
   color       String?
   icon        String?
+  /// Spotify playlist this collection was last exported to. Set by the export
+  /// route so re-exporting updates that playlist instead of creating duplicates.
+  /// Cleared when Spotify reports the playlist as deleted (404 on update).
+  spotifyPlaylistId String?
+  exportedAt        DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
