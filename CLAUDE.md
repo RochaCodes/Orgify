@@ -45,7 +45,9 @@ Auth state exists in two places and they are used for different things — don't
   anchor for everything in the DB. Every DB-backed route handler starts with `getCurrentUser()` → 401, then
   scopes the query by `user.id`; for nested resources it re-checks `collection.userId === user.id` → 404.
   The row also mirrors the tokens (refresh token encrypted via `lib/crypto.ts` AES-256-GCM) for future
-  background jobs — the request path does not read them.
+  background jobs — the request path does not read them, and they are nullable for that reason.
+  `getCurrentUser()` recreates the row from session identity if it is missing, because a JWT session
+  outlives the database (a migration reset leaves every DB route returning 401 otherwise).
 
 `app/api/auth/[...nextauth]/route.ts` deliberately bypasses Auth.js's Next.js handler and calls `@auth/core`'s
 `Auth()` with a request rebuilt from the real `Host` header. Next.js 16 route handlers report a fixed

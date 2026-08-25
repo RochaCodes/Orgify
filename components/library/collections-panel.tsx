@@ -24,7 +24,7 @@ export function CollectionsPanel({
   selectedId: string | null;
   onSelect: (id: string | null) => void;
 }) {
-  const { data: collections, isLoading } = useCollections();
+  const { data: collections, isLoading, error: collectionsError } = useCollections();
   const createCollection = useCreateCollection();
   const deleteCollection = useDeleteCollection();
   const [newName, setNewName] = useState("");
@@ -33,7 +33,7 @@ export function CollectionsPanel({
   const removeTrack = useRemoveTrackFromCollection();
   const exportCollection = useExportCollection();
 
-  const { data: tags } = useTags();
+  const { data: tags, error: tagsError } = useTags();
   const createTag = useCreateTag();
   const deleteTag = useDeleteTag();
   const [newTagName, setNewTagName] = useState("");
@@ -76,6 +76,12 @@ export function CollectionsPanel({
               +
             </Button>
           </form>
+
+          {(collectionsError || createCollection.error) && (
+            <p className="text-xs text-destructive">
+              {((collectionsError ?? createCollection.error) as Error).message}
+            </p>
+          )}
 
           {isLoading && (
             <div className="flex flex-col gap-2">
@@ -206,6 +212,12 @@ export function CollectionsPanel({
               +
             </Button>
           </form>
+
+          {(tagsError || createTag.error) && (
+            <p className="text-xs text-destructive">
+              {((tagsError ?? createTag.error) as Error).message}
+            </p>
+          )}
           <div className="flex flex-wrap gap-1">
             {tags?.map((tag) => (
               <button

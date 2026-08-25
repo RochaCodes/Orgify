@@ -83,3 +83,7 @@ npx tsc --noEmit # typecheck
 [Vercel](https://vercel.com/new) — remember to configure the environment variables (with a Postgres
 `DATABASE_URL`; Vercel's filesystem is not persistent, so SQLite will not survive) and to update the
 Redirect URI in the Spotify Dashboard to your production domain.
+
+## License
+
+[MIT](LICENSE)

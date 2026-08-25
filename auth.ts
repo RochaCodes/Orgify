@@ -44,7 +44,7 @@ export const authConfig: NextAuthConfig = {
               displayName: (profile.display_name as string) ?? null,
               email: (profile.email as string) ?? null,
               image: (profile as { images?: { url: string }[] }).images?.[0]?.url ?? null,
-              accessToken: account.access_token ?? "",
+              accessToken: account.access_token ?? null,
               accessTokenExpires: new Date(accessTokenExpires),
               refreshTokenEnc: encrypt(account.refresh_token),
             },
@@ -52,7 +52,7 @@ export const authConfig: NextAuthConfig = {
               displayName: (profile.display_name as string) ?? null,
               email: (profile.email as string) ?? null,
               image: (profile as { images?: { url: string }[] }).images?.[0]?.url ?? null,
-              accessToken: account.access_token ?? "",
+              accessToken: account.access_token ?? null,
               accessTokenExpires: new Date(accessTokenExpires),
               refreshTokenEnc: encrypt(account.refresh_token),
             },
@@ -72,29 +72,40 @@ export const authConfig: NextAuthConfig = {
         return { ...token, error: "RefreshAccessTokenError" as const };
       }
 
+      let refreshed;
       try {
-        const refreshed = await refreshSpotifyAccessToken(token.refreshToken);
-        token.accessToken = refreshed.accessToken;
-        token.accessTokenExpires = refreshed.accessTokenExpires;
-        token.refreshToken = refreshed.refreshToken;
-        delete token.error;
-
-        if (token.spotifyId) {
-          await prisma.user.update({
-            where: { spotifyId: token.spotifyId },
-            data: {
-              accessToken: refreshed.accessToken,
-              accessTokenExpires: new Date(refreshed.accessTokenExpires),
-              refreshTokenEnc: encrypt(refreshed.refreshToken),
-            },
-          });
-        }
-
-        return token;
+        refreshed = await refreshSpotifyAccessToken(token.refreshToken);
       } catch (error) {
         console.error("Failed to refresh Spotify access token", error);
         return { ...token, error: "RefreshAccessTokenError" as const };
       }
+
+      token.accessToken = refreshed.accessToken;
+      token.accessTokenExpires = refreshed.accessTokenExpires;
+      token.refreshToken = refreshed.refreshToken;
+      delete token.error;
+
+      // Mirroring the tokens is best-effort: the session is already valid at this point, so a
+      // database failure here must not be reported as a failed token refresh. Upsert rather
+      // than update so a row that went missing is recreated instead of throwing P2025.
+      if (token.spotifyId) {
+        const mirror = {
+          accessToken: refreshed.accessToken,
+          accessTokenExpires: new Date(refreshed.accessTokenExpires),
+          refreshTokenEnc: encrypt(refreshed.refreshToken),
+        };
+        try {
+          await prisma.user.upsert({
+            where: { spotifyId: token.spotifyId },
+            create: { spotifyId: token.spotifyId, ...mirror },
+            update: mirror,
+          });
+        } catch (error) {
+          console.error("Failed to mirror refreshed Spotify tokens to the database", error);
+        }
+      }
+
+      return token;
     },
     async session({ session, token }) {
       session.accessToken = token.accessToken;
