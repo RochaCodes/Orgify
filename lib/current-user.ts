@@ -1,3 +1,4 @@
+import { Prisma } from "@/app/generated/prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 
@@ -18,12 +19,27 @@ export async function getCurrentUser() {
   const user = await prisma.user.findUnique({ where: { spotifyId } });
   if (user) return user;
 
-  return prisma.user.create({
-    data: {
-      spotifyId,
-      displayName: session.user.name ?? null,
-      email: session.user.email ?? null,
-      image: session.user.image ?? null,
-    },
-  });
+  try {
+    return await prisma.user.create({
+      data: {
+        spotifyId,
+        displayName: session.user.name ?? null,
+        email: session.user.email ?? null,
+        image: session.user.image ?? null,
+      },
+    });
+  } catch (error) {
+    // Two concurrent requests can both observe the missing row and race to
+    // create it; the loser hits the unique constraint on spotifyId. That is
+    // not an error for the caller — re-read whichever row won the race.
+    if (
+      !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+      error.code !== "P2002"
+    ) {
+      throw error;
+    }
+    const winner = await prisma.user.findUnique({ where: { spotifyId } });
+    if (!winner) throw error;
+    return winner;
+  }
 }

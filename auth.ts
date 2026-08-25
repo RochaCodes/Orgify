@@ -1,7 +1,7 @@
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Spotify from "next-auth/providers/spotify";
 import { prisma } from "@/lib/db";
-import { encrypt } from "@/lib/crypto";
+import { decrypt, encrypt } from "@/lib/crypto";
 import { SPOTIFY_SCOPES } from "@/lib/spotify/scopes";
 import { refreshSpotifyAccessToken } from "@/lib/spotify/refresh-token";
 
@@ -27,16 +27,19 @@ export const authConfig: NextAuthConfig = {
     async jwt({ token, account, profile }) {
       // Initial sign-in: persist tokens on the JWT and upsert the User row.
       if (account && profile) {
+        // Spotify access tokens expire after 3600s and expires_at is normally
+        // set; fall back to that instead of "already expired", which would
+        // force a pointless refresh on every request after sign-in.
         const accessTokenExpires = account.expires_at
           ? account.expires_at * 1000
-          : Date.now();
+          : Date.now() + 3600_000;
 
         token.accessToken = account.access_token;
         token.accessTokenExpires = accessTokenExpires;
-        token.refreshToken = account.refresh_token;
         token.spotifyId = profile.id as string;
 
         if (account.refresh_token) {
+          token.refreshToken = account.refresh_token;
           await prisma.user.upsert({
             where: { spotifyId: profile.id as string },
             create: {
@@ -57,6 +60,22 @@ export const authConfig: NextAuthConfig = {
               refreshTokenEnc: encrypt(account.refresh_token),
             },
           });
+        } else {
+          // Spotify does not resend refresh_token on every sign-in (it stays
+          // valid until revoked). If this re-login omitted it, recover the
+          // encrypted copy mirrored in the database so the JWT does not end up
+          // without one and leave the user stuck on RefreshAccessTokenError.
+          try {
+            const row = await prisma.user.findUnique({
+              where: { spotifyId: profile.id as string },
+              select: { refreshTokenEnc: true },
+            });
+            if (row?.refreshTokenEnc) {
+              token.refreshToken = decrypt(row.refreshTokenEnc);
+            }
+          } catch (error) {
+            console.error("Failed to load stored Spotify refresh token", error);
+          }
         }
 
         return token;

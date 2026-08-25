@@ -74,12 +74,19 @@ export function useAddTrackToCollection() {
     onMutate: async ({ collectionId, track }) => {
       await qc.cancelQueries({ queryKey: ["collection-tracks", collectionId] });
       const previousTracks = qc.getQueryData<TrackDto[]>(["collection-tracks", collectionId]);
+      // Only bump trackCount when the insert below actually adds a new track;
+      // if it was already in the collection the count must stay untouched.
+      const alreadyPresent = previousTracks?.some((t) => t.id === track.id) ?? false;
       qc.setQueryData<TrackDto[]>(["collection-tracks", collectionId], (old) =>
         old && !old.some((t) => t.id === track.id) ? [...old, track] : (old ?? [track])
       );
       const previousCollections = qc.getQueryData<CollectionSummary[]>(["collections"]);
       qc.setQueryData<CollectionSummary[]>(["collections"], (old) =>
-        old?.map((c) => (c.id === collectionId ? { ...c, trackCount: c.trackCount + 1 } : c))
+        old?.map((c) =>
+          c.id === collectionId && !alreadyPresent
+            ? { ...c, trackCount: c.trackCount + 1 }
+            : c
+        )
       );
       return { previousTracks, previousCollections };
     },
@@ -106,13 +113,18 @@ export function useRemoveTrackFromCollection() {
     onMutate: async ({ collectionId, spotifyTrackId }) => {
       await qc.cancelQueries({ queryKey: ["collection-tracks", collectionId] });
       const previousTracks = qc.getQueryData<TrackDto[]>(["collection-tracks", collectionId]);
+      // Only drop trackCount when the filter below actually removes a track;
+      // if the cached list does not contain it the count must stay untouched.
+      const wasPresent = previousTracks?.some((t) => t.id === spotifyTrackId) ?? true;
       qc.setQueryData<TrackDto[]>(["collection-tracks", collectionId], (old) =>
         old?.filter((t) => t.id !== spotifyTrackId)
       );
       const previousCollections = qc.getQueryData<CollectionSummary[]>(["collections"]);
       qc.setQueryData<CollectionSummary[]>(["collections"], (old) =>
         old?.map((c) =>
-          c.id === collectionId ? { ...c, trackCount: Math.max(0, c.trackCount - 1) } : c
+          c.id === collectionId && wasPresent
+            ? { ...c, trackCount: Math.max(0, c.trackCount - 1) }
+            : c
         )
       );
       return { previousTracks, previousCollections };
