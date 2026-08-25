@@ -1,5 +1,6 @@
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/db";
+import { resolveSmartCollectionTracks } from "@/lib/collections/smart";
 import { SpotifyApiError } from "@/lib/spotify/client";
 import {
   createPlaylist,
@@ -17,10 +18,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
-  const items = await prisma.collectionTrack.findMany({
-    where: { collectionId: id },
-    orderBy: [{ position: "asc" }, { addedAt: "asc" }],
-  });
+  const items = collection.isSmart
+    ? await resolveSmartCollectionTracks(user.id, id)
+    : await prisma.collectionTrack.findMany({
+        where: { collectionId: id },
+        orderBy: [{ position: "asc" }, { addedAt: "asc" }],
+      });
   if (items.length === 0) {
     return Response.json({ error: "Collection is empty" }, { status: 400 });
   }

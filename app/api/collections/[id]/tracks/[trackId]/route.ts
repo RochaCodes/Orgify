@@ -13,6 +13,9 @@ export async function DELETE(
   if (!collection || collection.userId !== user.id) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
+  if (collection.isSmart) {
+    return Response.json({ error: "Smart collections don't support manual membership" }, { status: 400 });
+  }
 
   await prisma.collectionTrack
     .delete({

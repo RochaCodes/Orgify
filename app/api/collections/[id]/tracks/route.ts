@@ -1,30 +1,12 @@
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/db";
-import type { TrackDto } from "@/lib/spotify/dto";
+import { resolveSmartCollectionTracks } from "@/lib/collections/smart";
+import { toTrackDtoFromRow, type TrackDto } from "@/lib/spotify/dto";
 
 async function requireOwnedCollection(userId: string, collectionId: string) {
   const collection = await prisma.collection.findUnique({ where: { id: collectionId } });
   if (!collection || collection.userId !== userId) return null;
   return collection;
-}
-
-function toTrackDto(item: {
-  spotifyTrackId: string;
-  trackName: string;
-  trackArtists: string;
-  albumImage: string | null;
-  durationMs: number;
-  spotifyUrl: string;
-}): TrackDto {
-  return {
-    id: item.spotifyTrackId,
-    name: item.trackName,
-    artists: item.trackArtists,
-    albumName: "",
-    albumImage: item.albumImage,
-    durationMs: item.durationMs,
-    spotifyUrl: item.spotifyUrl,
-  };
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -35,12 +17,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const collection = await requireOwnedCollection(user.id, id);
   if (!collection) return Response.json({ error: "Not found" }, { status: 404 });
 
+  if (collection.isSmart) {
+    const items = await resolveSmartCollectionTracks(user.id, id);
+    return Response.json(items.map(toTrackDtoFromRow));
+  }
+
   const items = await prisma.collectionTrack.findMany({
     where: { collectionId: id },
     orderBy: [{ position: "asc" }, { addedAt: "asc" }],
   });
 
-  return Response.json(items.map(toTrackDto));
+  return Response.json(items.map(toTrackDtoFromRow));
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -50,6 +37,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const collection = await requireOwnedCollection(user.id, id);
   if (!collection) return Response.json({ error: "Not found" }, { status: 404 });
+  if (collection.isSmart) {
+    return Response.json({ error: "Smart collections don't support manual membership" }, { status: 400 });
+  }
 
   const body = (await req.json()) as { track?: TrackDto };
   const track = body.track;
@@ -71,5 +61,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     update: {},
   });
 
-  return Response.json(toTrackDto(item), { status: 201 });
+  return Response.json(toTrackDtoFromRow(item), { status: 201 });
 }
