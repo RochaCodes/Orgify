@@ -2,6 +2,7 @@ import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/db";
 import { requireOwnedCollection, SMART_COLLECTION_READONLY_ERROR } from "@/lib/collections/ownership";
 import { resolveSmartCollectionTracks } from "@/lib/collections/smart";
+import { readJson } from "@/lib/api/request";
 import { toTrackDtoFromRow, type TrackDto } from "@/lib/spotify/dto";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -36,12 +37,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return Response.json({ error: SMART_COLLECTION_READONLY_ERROR }, { status: 400 });
   }
 
-  const body = (await req.json()) as { track?: TrackDto };
+  const body = await readJson<{ track?: TrackDto }>(req);
+  if (!body) return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   const track = body.track;
   if (!track?.id || !track.name) {
     return Response.json({ error: "track is required" }, { status: 400 });
   }
 
+  // Answer 200 when the track is already in the collection — only a fresh insert is a 201.
+  const existing = await prisma.collectionTrack.findUnique({
+    where: { collectionId_spotifyTrackId: { collectionId: id, spotifyTrackId: track.id } },
+  });
+  if (existing) return Response.json(toTrackDtoFromRow(existing));
+
+  // Upsert rather than create so a concurrent add can't trip the unique constraint.
   const item = await prisma.collectionTrack.upsert({
     where: { collectionId_spotifyTrackId: { collectionId: id, spotifyTrackId: track.id } },
     create: {

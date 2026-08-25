@@ -1,11 +1,7 @@
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/db";
-
-async function requireOwnedCollection(userId: string, collectionId: string) {
-  const collection = await prisma.collection.findUnique({ where: { id: collectionId } });
-  if (!collection || collection.userId !== userId) return null;
-  return collection;
-}
+import { requireOwnedCollection } from "@/lib/collections/ownership";
+import { nonEmptyString, readJson } from "@/lib/api/request";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -15,17 +11,28 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const collection = await requireOwnedCollection(user.id, id);
   if (!collection) return Response.json({ error: "Not found" }, { status: 404 });
 
-  const body = (await req.json()) as {
+  const body = await readJson<{
     name?: string;
     description?: string | null;
     color?: string | null;
     icon?: string | null;
-  };
+  }>(req);
+  if (!body) return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+
+  // Same rule as POST /api/collections: a name must be present and non-empty once trimmed.
+  let name: string | undefined;
+  if (body.name !== undefined) {
+    const trimmedName = nonEmptyString(body.name);
+    if (trimmedName === null) {
+      return Response.json({ error: "Name is required" }, { status: 400 });
+    }
+    name = trimmedName;
+  }
 
   const updated = await prisma.collection.update({
     where: { id },
     data: {
-      ...(body.name !== undefined ? { name: body.name.trim() } : {}),
+      ...(name !== undefined ? { name } : {}),
       ...(body.description !== undefined ? { description: body.description } : {}),
       ...(body.color !== undefined ? { color: body.color } : {}),
       ...(body.icon !== undefined ? { icon: body.icon } : {}),

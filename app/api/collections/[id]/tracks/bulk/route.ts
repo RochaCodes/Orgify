@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/db";
 import { requireOwnedCollection, SMART_COLLECTION_READONLY_ERROR } from "@/lib/collections/ownership";
+import { readJson } from "@/lib/api/request";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -13,8 +14,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return Response.json({ error: SMART_COLLECTION_READONLY_ERROR }, { status: 400 });
   }
 
-  const body = (await req.json()) as { trackIds?: string[] };
-  const trackIds = body.trackIds?.filter(Boolean) ?? [];
+  const body = await readJson<{ trackIds?: string[] }>(req);
+  if (!body) return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+
+  const trackIds = Array.isArray(body.trackIds) ? body.trackIds.filter(Boolean) : [];
   if (trackIds.length === 0) {
     return Response.json({ error: "trackIds is required" }, { status: 400 });
   }
@@ -25,8 +28,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     where: { userId: user.id, spotifyTrackId: { in: trackIds } },
   });
 
+  // Only rows this request actually adds count as created, so an all-duplicates batch
+  // answers 200 instead of claiming a creation that didn't happen.
+  const alreadyPresent = await prisma.collectionTrack.findMany({
+    where: { collectionId: id, spotifyTrackId: { in: trackIds } },
+    select: { spotifyTrackId: true },
+  });
+  const presentIds = new Set(alreadyPresent.map((row) => row.spotifyTrackId));
+  const createdCount = likedTracks.filter((t) => !presentIds.has(t.spotifyTrackId)).length;
+
   // SQLite doesn't support Prisma's `skipDuplicates`, so upsert one by one in a transaction.
-  const result = await prisma.$transaction(
+  await prisma.$transaction(
     likedTracks.map((track) =>
       prisma.collectionTrack.upsert({
         where: { collectionId_spotifyTrackId: { collectionId: id, spotifyTrackId: track.spotifyTrackId } },
@@ -44,5 +56,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     )
   );
 
-  return Response.json({ count: result.length }, { status: 201 });
+  return Response.json({ count: createdCount }, { status: createdCount > 0 ? 201 : 200 });
 }

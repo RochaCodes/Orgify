@@ -1,5 +1,7 @@
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/db";
+import { requireOwnedCollection } from "@/lib/collections/ownership";
+import { Prisma } from "@/app/generated/prisma/client";
 
 export async function DELETE(
   _req: Request,
@@ -9,16 +11,20 @@ export async function DELETE(
   if (!user) return Response.json({ error: "Not authenticated" }, { status: 401 });
 
   const { id, playlistId } = await params;
-  const collection = await prisma.collection.findUnique({ where: { id } });
-  if (!collection || collection.userId !== user.id) {
-    return Response.json({ error: "Not found" }, { status: 404 });
-  }
+  const collection = await requireOwnedCollection(user.id, id);
+  if (!collection) return Response.json({ error: "Not found" }, { status: 404 });
 
-  await prisma.collectionPlaylist
-    .delete({
+  try {
+    await prisma.collectionPlaylist.delete({
       where: { collectionId_spotifyPlaylistId: { collectionId: id, spotifyPlaylistId: playlistId } },
-    })
-    .catch(() => null);
+    });
+  } catch (error) {
+    // P2025 = the playlist link was already removed; deleting it again is still success.
+    // Anything else is a real failure and must not masquerade as one.
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2025") {
+      throw error;
+    }
+  }
 
   return new Response(null, { status: 204 });
 }
