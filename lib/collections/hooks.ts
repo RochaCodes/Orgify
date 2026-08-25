@@ -36,7 +36,7 @@ export function useCollections() {
 export function useCreateCollection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: string | { name: string; isSmart?: boolean; tagId?: string }) =>
+    mutationFn: (input: string | { name: string; tagId?: string }) =>
       fetchJson<CollectionSummary>("/api/collections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

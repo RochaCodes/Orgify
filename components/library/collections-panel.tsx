@@ -56,7 +56,7 @@ export function CollectionsPanel({
     e.preventDefault();
     if (!smartTagId) return;
     const tagName = tags?.find((t) => t.id === smartTagId)?.name ?? "";
-    createCollection.mutate({ name: `Tagged: ${tagName}`, isSmart: true, tagId: smartTagId });
+    createCollection.mutate({ name: `Tagged: ${tagName}`, tagId: smartTagId });
     setSmartTagId("");
   }
 

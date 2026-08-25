@@ -1,5 +1,6 @@
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/db";
+import { requireOwnedCollection } from "@/lib/collections/ownership";
 import { resolveSmartCollectionTracks } from "@/lib/collections/smart";
 import { SpotifyApiError } from "@/lib/spotify/client";
 import {
@@ -13,13 +14,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!user) return Response.json({ error: "Not authenticated" }, { status: 401 });
 
   const { id } = await params;
-  const collection = await prisma.collection.findUnique({ where: { id } });
-  if (!collection || collection.userId !== user.id) {
-    return Response.json({ error: "Not found" }, { status: 404 });
-  }
+  const collection = await requireOwnedCollection(user.id, id);
+  if (!collection) return Response.json({ error: "Not found" }, { status: 404 });
 
-  const items = collection.isSmart
-    ? await resolveSmartCollectionTracks(user.id, id)
+  const items = collection.smartPlaylistRule
+    ? await resolveSmartCollectionTracks(user.id, collection.smartPlaylistRule.tagId)
     : await prisma.collectionTrack.findMany({
         where: { collectionId: id },
         orderBy: [{ position: "asc" }, { addedAt: "asc" }],

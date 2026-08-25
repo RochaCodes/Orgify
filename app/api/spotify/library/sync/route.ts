@@ -37,6 +37,8 @@ export async function POST() {
             const data = {
               trackName: dto.name,
               trackArtists: dto.artists,
+              trackNameLower: dto.name.toLowerCase(),
+              trackArtistsLower: dto.artists.toLowerCase(),
               albumName: dto.albumName,
               albumImage: dto.albumImage,
               durationMs: dto.durationMs,
