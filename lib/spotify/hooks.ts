@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import type { NowPlayingDto, PagedDto, PlaylistDto, RecentlyPlayedItemDto, SavedTrackDto } from "./dto";
+import type { NowPlayingDto, PagedDto, PlaylistDto, RecentlyPlayedItemDto } from "./dto";
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -22,15 +22,6 @@ export function useRecentlyPlayed() {
     queryKey: ["spotify", "recently-played"],
     queryFn: () => fetchJson<RecentlyPlayedItemDto[]>("/api/spotify/recently-played"),
     refetchInterval: 60_000,
-  });
-}
-
-export function useSavedTracks(offset: number, limit = 30) {
-  return useQuery({
-    queryKey: ["spotify", "saved-tracks", offset, limit],
-    queryFn: () =>
-      fetchJson<PagedDto<SavedTrackDto>>(`/api/spotify/library/tracks?offset=${offset}&limit=${limit}`),
-    placeholderData: keepPreviousData,
   });
 }
 
