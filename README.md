@@ -11,7 +11,8 @@ Stack: Next.js 16 (App Router) + TypeScript + Tailwind v4 + shadcn/ui + Auth.js 
 - **Collections** — user-defined folders that group saved tracks and playlists, something the Spotify API
   does not expose. Drag tracks from your library straight into a collection.
 - **Tags** — lightweight labels you can attach to any track, independent of collections.
-- **Export to Spotify** — turn a collection into a real private playlist in your account.
+- **Export to Spotify** — push a collection to a real private playlist in your account.
+  Re-exporting ("Sync") updates that same playlist instead of creating duplicates.
 
 ## Setup
 

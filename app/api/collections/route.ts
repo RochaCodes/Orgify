@@ -20,6 +20,8 @@ export async function GET() {
       description: c.description,
       color: c.color,
       icon: c.icon,
+      spotifyPlaylistId: c.spotifyPlaylistId,
+      exportedAt: c.exportedAt,
       trackCount: c._count.trackItems,
       playlistCount: c._count.playlistItems,
     }))

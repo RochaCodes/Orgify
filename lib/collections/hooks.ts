@@ -9,6 +9,8 @@ export interface CollectionSummary {
   description: string | null;
   color: string | null;
   icon: string | null;
+  spotifyPlaylistId: string | null;
+  exportedAt: string | null;
   trackCount: number;
   playlistCount: number;
 }
@@ -143,8 +145,13 @@ export function useAddPlaylistToCollection() {
 }
 
 export function useExportCollection() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (collectionId: string) =>
-      fetchJson<{ spotifyUrl: string }>(`/api/collections/${collectionId}/export`, { method: "POST" }),
+      fetchJson<{ spotifyUrl: string; created: boolean; exportedAt: string }>(
+        `/api/collections/${collectionId}/export`,
+        { method: "POST" }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["collections"] }),
   });
 }

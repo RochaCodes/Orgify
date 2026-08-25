@@ -39,6 +39,11 @@ export function CollectionsPanel({
   const [newTagName, setNewTagName] = useState("");
 
   const selectedCollection = collections?.find((c) => c.id === selectedId);
+  const isSynced = !!selectedCollection?.spotifyPlaylistId;
+
+  function formatSyncedAt(iso: string) {
+    return new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+  }
 
   function handleCreateCollection(e: React.FormEvent) {
     e.preventDefault();
@@ -136,22 +141,27 @@ export function CollectionsPanel({
                 disabled={exportCollection.isPending || selectedCollection.trackCount === 0}
                 onClick={() => exportCollection.mutate(selectedCollection.id)}
               >
-                Export
+                {isSynced ? "Sync" : "Export"}
               </Button>
             </CardTitle>
+            {isSynced && selectedCollection.exportedAt && (
+              <p className="text-[10px] text-muted-foreground">
+                Last synced {formatSyncedAt(selectedCollection.exportedAt)}
+              </p>
+            )}
           </CardHeader>
           <CardContent className="flex flex-col gap-1">
-            {exportCollection.isSuccess && (
+            {exportCollection.isSuccess && exportCollection.variables === selectedCollection.id && (
               <a
                 href={exportCollection.data.spotifyUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mb-1 text-xs text-primary underline"
               >
-                Playlist created on Spotify — open
+                Playlist {exportCollection.data.created ? "created" : "updated"} on Spotify — open
               </a>
             )}
-            {exportCollection.isError && (
+            {exportCollection.isError && exportCollection.variables === selectedCollection.id && (
               <p className="mb-1 text-xs text-destructive">
                 {(exportCollection.error as Error).message}
               </p>
