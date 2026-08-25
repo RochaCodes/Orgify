@@ -12,6 +12,9 @@ const PAGE_SIZE = 50;
  * Spotify). Runs in-request like the rest of this codebase's Spotify integrations — fine at
  * personal-library scale. Each page's upserts run as one transaction rather than sequential
  * awaits, so a page is committed atomically and pages don't wait on one round trip per track.
+ *
+ * The sweep only runs when the whole listing was walked; a run that stopped short reports
+ * `complete: false` and leaves both the cache and the "Last synced" stamp as they were.
  */
 export async function POST() {
   const user = await getCurrentUser();
@@ -20,13 +23,20 @@ export async function POST() {
   const startedAt = new Date();
   let offset = 0;
   let total = Infinity;
+  let syncedCount = 0;
+  let complete = true;
 
   try {
     while (offset < total) {
       const page = await spotifyFetch<SpotifyPagingResponse<SpotifySavedTrackItem>>(
         `/me/tracks?limit=${PAGE_SIZE}&offset=${offset}`
       );
-      if (!page) break;
+      // spotifyFetch maps Spotify's 204 to null. Mid-pagination that is not "end of list" —
+      // it is a page we never got to read, so everything behind it is still unaccounted for.
+      if (!page) {
+        complete = false;
+        break;
+      }
       total = page.total;
 
       const items = page.items.filter((i) => i.track);
@@ -52,22 +62,38 @@ export async function POST() {
             });
           })
         );
+        syncedCount += items.length;
       }
 
       offset += PAGE_SIZE;
     }
 
-    await prisma.likedTrack.deleteMany({
-      where: { userId: user.id, syncedAt: { lt: startedAt } },
-    });
+    // "Untouched" only means "no longer liked" if every page was actually read. After a short
+    // run it means "never fetched", and sweeping on that basis silently deletes the cache.
+    if (complete) {
+      // Still approximate: /me/tracks is offset-paginated over a list the user can change
+      // while this runs, so unliking a track mid-sync shifts the window and the track that
+      // slides into the seam is never fetched — the sweep then drops a row that is still
+      // liked. There is no cursor-based variant of this endpoint to close the gap; the row
+      // comes back on the next sync.
+      await prisma.likedTrack.deleteMany({
+        where: { userId: user.id, syncedAt: { lt: startedAt } },
+      });
+    }
 
-    const { likedTracksSyncedAt } = await prisma.user.update({
-      where: { id: user.id },
-      data: { likedTracksSyncedAt: new Date() },
-      select: { likedTracksSyncedAt: true },
-    });
+    const { likedTracksSyncedAt } = complete
+      ? await prisma.user.update({
+          where: { id: user.id },
+          data: { likedTracksSyncedAt: new Date() },
+          select: { likedTracksSyncedAt: true },
+        })
+      : // The UI renders this as "Last synced"; a partial run has no claim to that.
+        await prisma.user.findUniqueOrThrow({
+          where: { id: user.id },
+          select: { likedTracksSyncedAt: true },
+        });
 
-    return Response.json({ syncedAt: likedTracksSyncedAt, count: total === Infinity ? 0 : total });
+    return Response.json({ syncedAt: likedTracksSyncedAt, count: syncedCount, complete });
   } catch (error) {
     if (error instanceof SpotifyApiError) {
       return Response.json({ error: error.message }, { status: error.status });
