@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/db";
 import { requireOwnedCollection, SMART_COLLECTION_READONLY_ERROR } from "@/lib/collections/ownership";
+import { Prisma } from "@/app/generated/prisma/client";
 
 export async function DELETE(
   _req: Request,
@@ -16,11 +17,17 @@ export async function DELETE(
     return Response.json({ error: SMART_COLLECTION_READONLY_ERROR }, { status: 400 });
   }
 
-  await prisma.collectionTrack
-    .delete({
+  try {
+    await prisma.collectionTrack.delete({
       where: { collectionId_spotifyTrackId: { collectionId: id, spotifyTrackId: trackId } },
-    })
-    .catch(() => null);
+    });
+  } catch (error) {
+    // P2025 = the track was already removed; deleting it again is still a successful delete.
+    // Anything else is a real failure and must not masquerade as one.
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2025") {
+      throw error;
+    }
+  }
 
   return new Response(null, { status: 204 });
 }

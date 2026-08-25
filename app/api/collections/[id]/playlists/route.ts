@@ -1,18 +1,19 @@
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/db";
+import { requireOwnedCollection } from "@/lib/collections/ownership";
+import { nonEmptyString, readJson } from "@/lib/api/request";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return Response.json({ error: "Not authenticated" }, { status: 401 });
 
   const { id } = await params;
-  const collection = await prisma.collection.findUnique({ where: { id } });
-  if (!collection || collection.userId !== user.id) {
-    return Response.json({ error: "Not found" }, { status: 404 });
-  }
+  const collection = await requireOwnedCollection(user.id, id);
+  if (!collection) return Response.json({ error: "Not found" }, { status: 404 });
 
-  const body = (await req.json()) as { spotifyPlaylistId?: string };
-  const spotifyPlaylistId = body.spotifyPlaylistId?.trim();
+  const body = await readJson<{ spotifyPlaylistId?: string }>(req);
+  if (!body) return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+  const spotifyPlaylistId = nonEmptyString(body.spotifyPlaylistId);
   if (!spotifyPlaylistId) {
     return Response.json({ error: "spotifyPlaylistId is required" }, { status: 400 });
   }
