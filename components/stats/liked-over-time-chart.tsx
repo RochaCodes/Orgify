@@ -26,7 +26,9 @@ function formatMonth(month: string) {
  * primary hue is used throughout rather than a categorical palette. */
 export function LikedOverTimeChart({ data }: { data: Point[] }) {
   const gradientId = useId();
-  const [hovered, setHovered] = useState<number | null>(null);
+  // Keyed by month rather than by index: a refetch can shrink the series while the pointer
+  // is still down on a bar, and a stale index would then read past the end of the array.
+  const [hovered, setHovered] = useState<string | null>(null);
 
   if (data.length === 0) {
     return <p className="py-8 text-center text-xs text-muted-foreground">No liked-song history yet.</p>;
@@ -38,6 +40,14 @@ export function LikedOverTimeChart({ data }: { data: Point[] }) {
   const barGap = 2;
   const barWidth = Math.max(2, plotWidth / data.length - barGap);
   const labelEvery = Math.max(1, Math.ceil(data.length / 6));
+
+  const hoveredIndex = hovered === null ? -1 : data.findIndex((d) => d.month === hovered);
+  const hoveredPoint = hoveredIndex === -1 ? undefined : data[hoveredIndex];
+  // The SVG scales to the card, so the tooltip is placed as a fraction of the chart width.
+  const hoveredCentre =
+    ((PADDING_LEFT + hoveredIndex * (barWidth + barGap) + barWidth / 2) / WIDTH) * 100;
+  // Anchoring by the near edge at the extremes keeps the tooltip inside the card.
+  const tooltipAnchor = hoveredCentre < 15 ? 0 : hoveredCentre > 85 ? 100 : 50;
 
   return (
     <div className="relative">
@@ -66,7 +76,7 @@ export function LikedOverTimeChart({ data }: { data: Point[] }) {
           const barHeight = (d.count / max) * plotHeight;
           const x = PADDING_LEFT + i * (barWidth + barGap);
           const y = HEIGHT - PADDING_BOTTOM - barHeight;
-          const isHovered = hovered === i;
+          const isHovered = hovered === d.month;
           return (
             <g key={d.month}>
               <rect
@@ -78,7 +88,6 @@ export function LikedOverTimeChart({ data }: { data: Point[] }) {
                 fill={`url(#${gradientId})`}
                 opacity={isHovered ? 1 : 0.85}
                 className="transition-opacity"
-                onMouseEnter={() => setHovered(i)}
               />
               {i % labelEvery === 0 && (
                 <text
@@ -92,13 +101,26 @@ export function LikedOverTimeChart({ data }: { data: Point[] }) {
                   {formatMonth(d.month)}
                 </text>
               )}
+              {/* Full-height hit area over the whole slot, so the gaps between thin bars are
+                  not dead zones. Last in the group so it sits above the bar and its label. */}
+              <rect
+                x={x}
+                y={0}
+                width={barWidth + barGap}
+                height={HEIGHT}
+                fill="transparent"
+                onMouseEnter={() => setHovered(d.month)}
+              />
             </g>
           );
         })}
       </svg>
-      {hovered !== null && (
-        <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md">
-          {formatMonth(data[hovered].month)} · {data[hovered].count} liked
+      {hoveredPoint && (
+        <div
+          className="pointer-events-none absolute top-0 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md"
+          style={{ left: `${hoveredCentre}%`, transform: `translateX(-${tooltipAnchor}%)` }}
+        >
+          {formatMonth(hoveredPoint.month)} · {hoveredPoint.count} liked
         </div>
       )}
     </div>
